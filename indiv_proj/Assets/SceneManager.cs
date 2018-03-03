@@ -14,18 +14,18 @@ public class SceneManager : MonoBehaviour {
     public const int fileXNum = 16;
     public const int fileZNum = 16;
     public const int fileYNum = 128;
-    
+    public const int fileBlockTypeSize = sizeof(int) + sizeof(bool);
+    public const int fileBlockSize = fileBlockTypeSize * fileXNum * fileZNum * fileYNum;
 
-    public const int fileBlockSize = sizeof(int) + sizeof(bool);
-    
 
-    public int[,] preLoadOnPrefabGeometryIndex;    //3x3
-    public int[,] preLoadOnMemGeometryIndex;    //3x3
-    public int[,] preLoadOnTempGeometryIndex;   //5x5
 
-    public const int prefabGeoIndexSize = 1;
-    public const int memGeoIndexSize = 1;
-    public const int tempGeoIndexSize = 3;
+    public int[,] preLoadOnPrefabGeometryIndex;
+    public int[,] preLoadOnMemGeometryIndex;
+    public int[,] preLoadOnTempGeometryIndex;
+
+    public const int prefabGeoIndexSize = 3;    //3x3
+    public const int memGeoIndexSize = 3;    //3x3
+    public const int tempGeoIndexSize = 5;   //5x5
 
     public HashSet<KeyValuePair<int, int>> curLoadedTempFilePairList = new HashSet<KeyValuePair<int, int>>();
 
@@ -34,6 +34,16 @@ public class SceneManager : MonoBehaviour {
 
     public HashSet<KeyValuePair<int, int>> curLoadedPrefabPairList = new HashSet<KeyValuePair<int, int>>();
     public Dictionary<KeyValuePair<int, int>, Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]>> curLoadedPrefab = new Dictionary<KeyValuePair<int, int>, Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]>> ();
+
+
+    public int playerBlockOriginTargetX = 0;
+    public int playerBlockOriginTargetZ = 0;
+
+    private IEnumerator corutineLoadGeometry;
+    private IEnumerator corutineSaveGeometry;
+    private IEnumerator corutineMainGeometry;
+
+    private PlayerData tempPlayerLoadedDataForInstantize;
 
     public void Awake()
     {
@@ -93,11 +103,270 @@ public class SceneManager : MonoBehaviour {
         //user info load & player instatitate
         LoadPlayerInfo();
 
-        LoadOriginGeometryWithUserPos(playerInstance.transform.position);
-        LoadTempGeometryWithUserPos(playerInstance.transform.position);
-        LoadPrefabWithUserPos(playerInstance.transform.position);
+        GetPlayerTarget(new Vector3(tempPlayerLoadedDataForInstantize.posX, tempPlayerLoadedDataForInstantize.posY, tempPlayerLoadedDataForInstantize.posZ), out playerBlockOriginTargetX, out playerBlockOriginTargetZ);
+
+        LoadOriginGeometryWithUserPos(playerBlockOriginTargetX, playerBlockOriginTargetZ);
+        LoadTempGeometryWithUserPos(playerBlockOriginTargetX, playerBlockOriginTargetZ);
+        LoadMemWithUserPos(playerBlockOriginTargetX, playerBlockOriginTargetZ);
+
+        InstantizePlayer();
+
+        //set corutine
+        corutineLoadGeometry = LoadGeometryUpdateCorutine();
+        corutineSaveGeometry = SaveGeometryUpdateCorutine();
+        corutineMainGeometry = GeomeTryUpdateCorutine();
+
+        StartCoroutine(corutineMainGeometry);
 
     }
+    IEnumerator GeomeTryUpdateCorutine()
+    {
+        while (true)
+        {
+            Vector3 playerPosition = playerInstance.transform.position;
+            int playerBlockTargetX = ((int)playerPosition.x);
+            int playerBlockTargetZ = ((int)playerPosition.z);
+            if (playerBlockTargetX < 0)
+            {
+                playerBlockTargetX -= (fileXNum - 1);
+            }
+            if (playerBlockTargetZ < 0)
+            {
+                playerBlockTargetZ -= (fileZNum - 1);
+            }
+            playerBlockTargetX /= fileXNum;
+            playerBlockTargetZ /= fileZNum;
+
+            if (playerBlockTargetX != playerBlockOriginTargetX || playerBlockTargetZ != playerBlockOriginTargetZ)
+            {
+                //stop 2 corutine
+                StopCoroutine(corutineLoadGeometry);
+                //StopCoroutine(corutineSaveGeometry);
+
+                //origin block target X, Z update
+                playerBlockOriginTargetX = playerBlockTargetX;
+                playerBlockOriginTargetZ = playerBlockTargetZ;
+
+                //start 2 corutine
+                corutineLoadGeometry = LoadGeometryUpdateCorutine();
+                corutineSaveGeometry = SaveGeometryUpdateCorutine();
+
+                StartCoroutine(corutineLoadGeometry);
+                StartCoroutine(corutineSaveGeometry);
+
+            }
+            yield return new WaitForSeconds(1.0f);
+        }
+    }
+
+    IEnumerator LoadGeometryUpdateCorutine()
+    {
+        HashSet<KeyValuePair<int, int>> needToLoadTempGeoSetForLoop = new HashSet<KeyValuePair<int, int>>();
+        //HashSet<KeyValuePair<int, int>> needToLoadTempGeoSetForCompare; //change to list is better performance?
+
+        HashSet<KeyValuePair<int, int>> needToLoadMemGeoSetForLoop = new HashSet<KeyValuePair<int, int>>();
+        //HashSet<KeyValuePair<int, int>> needToLoadMemGeoSetForCompare; //change to list is better performance?
+
+        HashSet<KeyValuePair<int, int>> needToLoadPrefabGeoSetForLoop = new HashSet<KeyValuePair<int, int>>();
+        //HashSet<KeyValuePair<int, int>> needToLoadPrefabGeoSetForCompare; //change to list is better performance?
+
+
+        for (int i = 0; i < preLoadOnTempGeometryIndex.Length / 2; i++)
+        {
+            int accX = preLoadOnTempGeometryIndex[i, 0];
+            int accZ = preLoadOnTempGeometryIndex[i, 1];
+            int targetX = accX + playerBlockOriginTargetX;
+            int targetZ = accZ + playerBlockOriginTargetZ;
+            needToLoadTempGeoSetForLoop.Add(new KeyValuePair<int, int>(targetX, targetZ));
+        }
+        needToLoadTempGeoSetForLoop.ExceptWith(curLoadedTempFilePairList); //target temp geo - cur loaded temp geo = need to load temp geo
+        //needToLoadTempGeoSetForCompare = new HashSet<KeyValuePair<int, int>>(needToLoadTempGeoSetForLoop);
+        IEnumerator<KeyValuePair<int, int>> tempGeoEnumerator = needToLoadTempGeoSetForLoop.GetEnumerator();
+        tempGeoEnumerator.Reset();
+        bool isTempGeoLoop = tempGeoEnumerator.MoveNext();
+
+
+        for (int i = 0; i < preLoadOnMemGeometryIndex.Length / 2; i++)
+        {
+            int accX = preLoadOnMemGeometryIndex[i, 0];
+            int accZ = preLoadOnMemGeometryIndex[i, 1];
+            int targetX = accX + playerBlockOriginTargetX;
+            int targetZ = accZ + playerBlockOriginTargetZ;
+            needToLoadMemGeoSetForLoop.Add(new KeyValuePair<int, int>(targetX, targetZ));
+        }
+        needToLoadMemGeoSetForLoop.ExceptWith(curLoadedMemPairList); //target temp geo - cur loaded temp geo = need to load temp geo
+        //needToLoadMemGeoSetForCompare = new HashSet<KeyValuePair<int, int>>(needToLoadMemGeoSetForLoop);
+        IEnumerator<KeyValuePair<int, int>> memGeoEnumerator = needToLoadMemGeoSetForLoop.GetEnumerator();
+        memGeoEnumerator.Reset();
+        bool isMemGeoLoop = memGeoEnumerator.MoveNext();
+
+
+        for (int i = 0; i < preLoadOnPrefabGeometryIndex.Length / 2; i++)
+        {
+            int accX = preLoadOnPrefabGeometryIndex[i, 0];
+            int accZ = preLoadOnPrefabGeometryIndex[i, 1];
+            int targetX = accX + playerBlockOriginTargetX;
+            int targetZ = accZ + playerBlockOriginTargetZ;
+            needToLoadPrefabGeoSetForLoop.Add(new KeyValuePair<int, int>(targetX, targetZ));
+        }
+        needToLoadPrefabGeoSetForLoop.ExceptWith(curLoadedPrefabPairList); //target temp geo - cur loaded temp geo = need to load temp geo
+        //needToLoadPrefabGeoSetForCompare = new HashSet<KeyValuePair<int, int>>(needToLoadPrefabGeoSetForLoop);
+        IEnumerator<KeyValuePair<int, int>> prefabGeoEnumerator = needToLoadPrefabGeoSetForLoop.GetEnumerator();
+        prefabGeoEnumerator.Reset();
+        bool isPrefabGeoLoop = prefabGeoEnumerator.MoveNext();
+
+
+        while (isTempGeoLoop)
+        {
+            if (!curLoadedTempFilePairList.Contains(new KeyValuePair<int, int>(tempGeoEnumerator.Current.Key, tempGeoEnumerator.Current.Value)))    // has not temp file
+            {
+                //load origin to temp or create temp.
+                LoadOriginGeometry(tempGeoEnumerator.Current.Key, tempGeoEnumerator.Current.Value);
+            }
+            else
+            {
+                //already has temp.
+            }
+            isTempGeoLoop = tempGeoEnumerator.MoveNext();
+            yield return new WaitForSeconds(0.1f);
+
+            while (isMemGeoLoop)
+            {
+                //check already in mem
+                if (!curLoadedMemPairList.Contains(new KeyValuePair<int, int>(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value)))
+                {
+                    if (curLoadedTempFilePairList.Contains(new KeyValuePair<int, int>(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value)))
+                    {
+                        //load temp to mem
+                        LoadTempGeometry(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value);
+                    }
+                    else
+                    {
+                        //not in temp. Need to wait temp load.
+                        break;
+                    }
+                }
+                else
+                {
+                    //already has mem
+                }
+                isMemGeoLoop = memGeoEnumerator.MoveNext();
+                yield return new WaitForSeconds(0.1f);
+
+
+                while (isPrefabGeoLoop)
+                {
+                    //check already in prefab
+                    if (!curLoadedPrefabPairList.Contains(new KeyValuePair<int, int>(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value)))
+                    {
+                        //check mem exists
+                        if (curLoadedMemPairList.Contains(new KeyValuePair<int, int>(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value)))
+                        {
+                            //load mem to prefab
+                            LoadMemGeometry(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value);
+                        }
+                        else
+                        {
+                            //not in temp. Need to wait temp load.
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        //already has mem
+                    }
+                    isPrefabGeoLoop = prefabGeoEnumerator.MoveNext();
+                    yield return new WaitForSeconds(0.1f);
+                }
+            }
+        }
+
+        yield return new WaitForSeconds(1.0f);
+    }
+
+    IEnumerator SaveGeometryUpdateCorutine()
+    {
+        HashSet<KeyValuePair<int, int>> needToLoadMemGeoSetForLoop = new HashSet<KeyValuePair<int, int>>();
+        HashSet<KeyValuePair<int, int>> needToLoadPrefabGeoSetForLoop = new HashSet<KeyValuePair<int, int>>();
+
+        HashSet<KeyValuePair<int, int>> needToSaveMemGeoSetForLoop;
+        HashSet<KeyValuePair<int, int>> needToSaavePrefabGeoSetForLoop;
+
+        for (int i = 0; i < preLoadOnMemGeometryIndex.Length / 2; i++)
+        {
+            int accX = preLoadOnMemGeometryIndex[i, 0];
+            int accZ = preLoadOnMemGeometryIndex[i, 1];
+            int targetX = accX + playerBlockOriginTargetX;
+            int targetZ = accZ + playerBlockOriginTargetZ;
+            needToLoadMemGeoSetForLoop.Add(new KeyValuePair<int, int>(targetX, targetZ));
+        }
+        //need to save mem = cur loaded mem - need to load mem
+        needToSaveMemGeoSetForLoop = new HashSet<KeyValuePair<int, int>>(curLoadedMemPairList);
+        needToSaveMemGeoSetForLoop.ExceptWith(needToLoadMemGeoSetForLoop);
+        IEnumerator<KeyValuePair<int, int>> memGeoEnumerator = needToSaveMemGeoSetForLoop.GetEnumerator();
+        memGeoEnumerator.Reset();
+        bool isMemGeoLoop = memGeoEnumerator.MoveNext();
+
+
+        for (int i = 0; i < preLoadOnPrefabGeometryIndex.Length / 2; i++)
+        {
+            int accX = preLoadOnPrefabGeometryIndex[i, 0];
+            int accZ = preLoadOnPrefabGeometryIndex[i, 1];
+            int targetX = accX + playerBlockOriginTargetX;
+            int targetZ = accZ + playerBlockOriginTargetZ;
+            needToLoadPrefabGeoSetForLoop.Add(new KeyValuePair<int, int>(targetX, targetZ));
+        }
+        //need to save prefab = cur loaded prefab - need to load prefab
+        needToSaavePrefabGeoSetForLoop = new HashSet<KeyValuePair<int, int>>(curLoadedPrefabPairList);
+        needToSaavePrefabGeoSetForLoop.ExceptWith(needToLoadPrefabGeoSetForLoop);
+        IEnumerator<KeyValuePair<int, int>> prefabGeoEnumerator = needToSaavePrefabGeoSetForLoop.GetEnumerator();
+        prefabGeoEnumerator.Reset();
+        bool isPrefabGeoLoop = prefabGeoEnumerator.MoveNext();
+
+
+        while (isMemGeoLoop)
+        {
+            //check has mem
+            if(curLoadedMemPairList.Contains(new KeyValuePair<int, int>(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value))){
+                //check not in prefab. Only in mem.
+                if (!curLoadedPrefabPairList.Contains(new KeyValuePair<int, int>(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value)))
+                {
+                    SaveMemGeometry(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value);
+                }
+                else
+                {
+                    //need to wait.(wait : prefab -> mem)
+                }
+            }
+            else
+            {
+                //already deleted from mem to temp
+            }
+            memGeoEnumerator.MoveNext();
+            yield return new WaitForSeconds(0.1f);
+
+            //check has prefab
+            if (curLoadedPrefabPairList.Contains(new KeyValuePair<int, int>(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value)))
+            {
+                SavePrefabGeometry(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value);
+            }
+            else
+            {
+                //already deleted prefab to mem
+            }
+            prefabGeoEnumerator.MoveNext();
+            yield return new WaitForSeconds(0.1f);
+        }
+
+
+
+
+        yield return new WaitForSeconds(1.0f);
+    }
+
+    
+
+
     public void SavePlayerInfo()
     {
         try
@@ -106,9 +375,17 @@ public class SceneManager : MonoBehaviour {
             FileStream file = File.Open(Application.persistentDataPath + "/playerInfo.dat", FileMode.Create);
 
             PlayerData playerData = new PlayerData();
-            playerData.pos = playerInstance.transform.position;
-            playerData.quat = playerInstance.transform.rotation;
+            Vector3 playerPos = playerInstance.transform.position;
+            playerData.posX =playerPos.x;
+            playerData.posY =playerPos.y;
+            playerData.posZ =playerPos.z;
 
+            Quaternion playerQuat = playerInstance.transform.rotation;
+            playerData.quatX = playerQuat.x;
+            playerData.quatY = playerQuat.y;
+            playerData.quatZ = playerQuat.z;
+            playerData.quatW = playerQuat.w;
+            
             bf.Serialize(file, playerData);
 
             file.Close();
@@ -128,44 +405,53 @@ public class SceneManager : MonoBehaviour {
             {
                 BinaryFormatter bf = new BinaryFormatter();
                 FileStream file = File.Open(Application.persistentDataPath + "/playerInfo.dat", FileMode.Open);
-                PlayerData playerData = (PlayerData)bf.Deserialize(file);
+                tempPlayerLoadedDataForInstantize = (PlayerData)bf.Deserialize(file);
                 file.Close();
-                playerInstance = Instantiate(playerPrefab, playerData.pos, playerData.quat).GetComponent<Player>();
-
             }
             catch (IOException e)
             {
                 Debug.Log(e.ToString() + "LoadPlayerInfo Load error");
-                playerInstance = Instantiate(playerPrefab, new Vector3(0, 0, 0), new Quaternion()).GetComponent<Player>();
+                tempPlayerLoadedDataForInstantize = new PlayerData();
+                tempPlayerLoadedDataForInstantize.posX = 0;
+                tempPlayerLoadedDataForInstantize.posY = 100;
+                tempPlayerLoadedDataForInstantize.posZ = 0;
+
+                Quaternion tempQuat = new Quaternion();
+                tempPlayerLoadedDataForInstantize.quatX = tempQuat.x;
+                tempPlayerLoadedDataForInstantize.quatY = tempQuat.y;
+                tempPlayerLoadedDataForInstantize.quatZ = tempQuat.z;
+                tempPlayerLoadedDataForInstantize.quatW = tempQuat.w;
             }
         }
         else
         {
-            playerInstance = Instantiate(playerPrefab, new Vector3(0, 0, 0), new Quaternion()).GetComponent<Player>();
+            tempPlayerLoadedDataForInstantize = new PlayerData();
+            tempPlayerLoadedDataForInstantize.posX = 0;
+            tempPlayerLoadedDataForInstantize.posY = 100;
+            tempPlayerLoadedDataForInstantize.posZ = 0;
+
+            Quaternion tempQuat = new Quaternion();
+            tempPlayerLoadedDataForInstantize.quatX = tempQuat.x;
+            tempPlayerLoadedDataForInstantize.quatY = tempQuat.y;
+            tempPlayerLoadedDataForInstantize.quatZ = tempQuat.z;
+            tempPlayerLoadedDataForInstantize.quatW = tempQuat.w;
         }
     }
-
-    public void LoadOriginGeometryWithUserPos(Vector3 userPosition)
+    public void InstantizePlayer()
     {
-        int fileX = ((int)userPosition.x);
-        int fileZ = ((int)userPosition.z);
-        if (fileX < 0)
-        {
-            fileX -= (fileXNum-1);
-        }
-        if (fileZ < 0)
-        {
-            fileZ -= (fileZNum - 1);
-        }
-        fileX /= fileXNum;
-        fileZ /= fileZNum;
+        Vector3 playerPosVec = new Vector3(tempPlayerLoadedDataForInstantize.posX, tempPlayerLoadedDataForInstantize.posY, tempPlayerLoadedDataForInstantize.posZ);
+        Quaternion playerQuat = new Quaternion(tempPlayerLoadedDataForInstantize.quatX, tempPlayerLoadedDataForInstantize.quatY, tempPlayerLoadedDataForInstantize.quatZ, tempPlayerLoadedDataForInstantize.quatW);
+        playerInstance = Instantiate(playerPrefab, playerPosVec, playerQuat).GetComponent<Player>();
+    }
 
+    public void LoadOriginGeometryWithUserPos(int playerBlockTargetX, int playerBlockTargetZ)
+    {
         for (int i = 0; i < preLoadOnTempGeometryIndex.Length / 2; i++)
         {
             int accX = preLoadOnTempGeometryIndex[i, 0];
             int accZ = preLoadOnTempGeometryIndex[i, 1];
-            int targetX = accX + fileX;
-            int targetZ = accZ + fileZ;
+            int targetX = accX + playerBlockTargetX;
+            int targetZ = accZ + playerBlockTargetZ;
             if (!curLoadedTempFilePairList.Contains(new KeyValuePair<int, int>(targetX, targetZ)))    // has not temp file
             { 
                 LoadOriginGeometry(targetX, targetZ);
@@ -174,27 +460,14 @@ public class SceneManager : MonoBehaviour {
         
     }
 
-    public void LoadTempGeometryWithUserPos(Vector3 userPosition)
+    public void LoadTempGeometryWithUserPos(int playerBlockTargetX, int playerBlockTargetZ)
     {
-        int fileX = ((int)userPosition.x);
-        int fileZ = ((int)userPosition.z);
-        if (fileX < 0)
-        {
-            fileX -= (fileXNum - 1);
-        }
-        if (fileZ < 0)
-        {
-            fileZ -= (fileZNum - 1);
-        }
-        fileX /= fileXNum;
-        fileZ /= fileZNum;
-
         for (int i = 0; i < preLoadOnMemGeometryIndex.Length / 2; i++)
         {
             int accX = preLoadOnMemGeometryIndex[i, 0];
             int accZ = preLoadOnMemGeometryIndex[i, 1];
-            int targetX = accX + fileX;
-            int targetZ = accZ + fileZ;
+            int targetX = accX + playerBlockTargetX;
+            int targetZ = accZ + playerBlockTargetZ;
             if(curLoadedTempFilePairList.Contains(new KeyValuePair<int, int>(targetX, targetZ)))    // has temp file
             {
                 if(!curLoadedMemPairList.Contains(new KeyValuePair<int, int>(targetX, targetZ))) //not has mem
@@ -216,32 +489,19 @@ public class SceneManager : MonoBehaviour {
         }
     }
 
-    public void LoadPrefabWithUserPos(Vector3 userPosition)
+    public void LoadMemWithUserPos(int playerBlockTargetX, int playerBlockTargetZ)
     {
-        int fileX = ((int)userPosition.x);
-        int fileZ = ((int)userPosition.z);
-        if (fileX < 0)
-        {
-            fileX -= (fileXNum - 1);
-        }
-        if (fileZ < 0)
-        {
-            fileZ -= (fileZNum - 1);
-        }
-        fileX /= fileXNum;
-        fileZ /= fileZNum;
-
         for (int i = 0; i < preLoadOnPrefabGeometryIndex.Length / 2; i++)
         {
             int accX = preLoadOnPrefabGeometryIndex[i, 0];
             int accZ = preLoadOnPrefabGeometryIndex[i, 1];
-            int targetX = accX + fileX;
-            int targetZ = accZ + fileZ;
+            int targetX = accX + playerBlockTargetX;
+            int targetZ = accZ + playerBlockTargetZ;
             if (curLoadedMemPairList.Contains(new KeyValuePair<int, int>(targetX, targetZ)))    // has temp file
             {
                 if (!curLoadedPrefabPairList.Contains(new KeyValuePair<int, int>(targetX, targetZ))) //not has prefab
                 {
-                    LoadPrefabGeometry(targetX, targetZ);
+                    LoadMemGeometry(targetX, targetZ);
                 }
                 else
                 {
@@ -257,102 +517,28 @@ public class SceneManager : MonoBehaviour {
             }
         }
     }
-    public void LoadPrefabGeometry(int targetX, int targetZ)
-    {
-        Byte[] bytes;
-        curLoadedMem.TryGetValue(new KeyValuePair<int, int>(targetX, targetZ), out bytes);
-        //instance
-        int startIndex = 0;
-        Quaternion targetQuat = new Quaternion();
-        Vector3 targetPosition = new Vector3();
-
-        Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]> targetXZDictionary = new Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]>();
-        
-        for (int x = targetX * fileXNum; x < targetX * fileXNum + fileXNum; x++)
-        {
-            targetPosition.x = x;
-            for (int z = targetZ * fileZNum; z < targetZ * fileZNum + fileZNum; z++)
-            {
-                targetPosition.z = z;
-                BlockPrefabClass[] blockPrefabClassArray = new BlockPrefabClass[fileYNum];
-                for (int y=0; y<fileYNum; y++)
-                {
-                    blockPrefabClassArray[y] = new BlockPrefabClass();
-                    targetPosition.y = y;
-                    int loadedGeoType = BitConverter.ToInt32(bytes, startIndex);    //todo : invalid int
-                    startIndex += 4;
-                    bool loadedInstant = BitConverter.ToBoolean(bytes, startIndex);    //todo : invalid int
-                    startIndex += 1;
-                    if (loadedGeoType == 0)
-                    {
-                        
-                        //air
-                        blockPrefabClassArray[y].isAir = true;
-                        blockPrefabClassArray[y].blockType = loadedGeoType;
-                        blockPrefabClassArray[y].gameObject = null;
-                        blockPrefabClassArray[y].isInstantize = false;
-                        blockPrefabClassArray[y].isRender = false;
-                    }
-                    else
-                    {
-                        //dirt
-
-                        blockPrefabClassArray[y].isAir = false;
-                        blockPrefabClassArray[y].blockType = loadedGeoType;
-
-                        if (loadedInstant)
-                        {
-                            blockPrefabClassArray[y].gameObject = Instantiate(geoPrefab[loadedGeoType], targetPosition, targetQuat);
-                            MeshRenderer meshRenderer = blockPrefabClassArray[y].gameObject.GetComponent<MeshRenderer>();
-                            MeshCollider meshCollider = blockPrefabClassArray[y].gameObject.GetComponent<MeshCollider>();
-                            
-
-                            meshRenderer.enabled = true;
-                            meshCollider.enabled = true;
-                            blockPrefabClassArray[y].isInstantize = true;
-                            blockPrefabClassArray[y].isRender = true;
-                        }
-                        else
-                        {
-                            blockPrefabClassArray[y].gameObject = null;
-                            blockPrefabClassArray[y].isInstantize = false;
-                            blockPrefabClassArray[y].isRender = false;
-                        }
-                    }
-                }
-                targetXZDictionary.Add(new KeyValuePair<int, int>(x, z), blockPrefabClassArray);
-            }
-            
-
-        }
-        //public Dictionary<KeyValuePair<int, int>,  Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]>  > curLoadedPrefab
-        //curLoadedPrefab.Add(new KeyValuePair<int, int>(targetX, targetZ), targetXZDictionary);    //prefab list add
-
-        curLoadedPrefab.Add(new KeyValuePair<int, int>(targetX, targetZ), targetXZDictionary);    //add dictionary(<realx, realz>, array)
-        curLoadedPrefabPairList.Add(new KeyValuePair<int, int>(targetX, targetZ));  //pair list add
-    }
-
-
+    
+    
     //load origin geometry- > temp geometry
     //register to map.
     public void LoadOriginGeometry(int targetX, int targetZ)
     {
         byte[] tempGeometry = null;
-        tempGeometry = new byte[fileBlockSize * fileXNum * fileZNum * fileYNum];
+        tempGeometry = new byte[fileBlockSize];
 
         BinaryReader br;
         try
         {
             //read origin file
             br = new BinaryReader(new FileStream(Application.persistentDataPath + "/map_" + targetX + "_" + targetZ + ".dat", FileMode.Open));
-            br.Read(tempGeometry, 0, fileBlockSize * fileXNum * fileZNum * fileYNum);
+            br.Read(tempGeometry, 0, fileBlockSize);
 
             //write to temp file
             BinaryWriter bw;
             try
             {
                 bw = new BinaryWriter(new FileStream(Application.persistentDataPath + "/temp_map_" + targetX + "_" + targetZ + ".dat", FileMode.CreateNew));
-                bw.Write(tempGeometry, 0, fileBlockSize * fileXNum * fileZNum * fileYNum);
+                bw.Write(tempGeometry, 0, fileBlockSize);
                 bw.Close();
                 curLoadedTempFilePairList.Add(new KeyValuePair<int, int>(targetX, targetZ));
             }
@@ -372,82 +558,266 @@ public class SceneManager : MonoBehaviour {
         }
     }
 
-    public void SaveOriginGeometry(int targetX, int targetZ)
-    {
-        byte[] bytes = new byte[fileBlockSize * fileXNum * fileZNum * fileYNum];
-
-        BinaryReader br;
-        BinaryWriter bw;
-        try
-        {
-            br = new BinaryReader(new FileStream(Application.persistentDataPath + "/temp_map_" + targetX + "_" + targetZ + ".dat", FileMode.Open));
-            br.Read(bytes, 0, fileBlockSize * fileXNum * fileZNum * fileYNum);
-            br.Close();
-        }
-        catch (IOException e)
-        {
-            Debug.Log(e.Message + "\n Cannot open temp file. saveOriginGeometry");
-        }
-
-        try
-        {
-            bw = new BinaryWriter(new FileStream(Application.persistentDataPath + "/map_" + targetX + "_" + targetZ + ".dat", FileMode.Create));
-            bw.Write(bytes, 0, fileBlockSize * fileXNum * fileZNum * fileYNum);
-            bw.Close();
-        }
-        catch (IOException e)
-        {
-            Debug.Log(e.Message + "\n Cannot write origin file. saveOriginGeometry");
-        }
-    }
-
-    public void SaveTempGeometry(int targetX, int targetZ)
-    {
-        byte[] saveByte = null;
-        KeyValuePair<int, int> mapKey = new KeyValuePair<int, int>(targetX, targetZ);
-
-        saveByte = curLoadedMem[mapKey];
-
-        if (saveByte != null)
-        {
-            BinaryWriter bw;
-            try
-            {
-                bw = new BinaryWriter(new FileStream(Application.persistentDataPath + "/temp_map_" + targetX + "_" + targetZ + ".dat", FileMode.Create));
-                bw.Write(saveByte, 0, fileBlockSize * fileXNum * fileZNum * fileYNum);
-                bw.Close();
-            }
-            catch (IOException e)
-            {
-                Debug.Log(e.Message + "\n Cannot create temp file. saveTempGeometry");
-            }
-        }
-        else
-        {
-            Debug.Log("SaveByte is null. saveTempGeometry");
-        }
-
-    }
-
+    
+    //temp to mem
     public void LoadTempGeometry(int targetX, int targetZ)
     {
         byte[] tempGeometry = null;
-        tempGeometry = new byte[fileBlockSize * fileXNum * fileZNum * fileYNum];
+        tempGeometry = new byte[fileBlockSize];
         BinaryReader br;
         try
         {
             br = new BinaryReader(new FileStream(Application.persistentDataPath + "/temp_map_" + targetX + "_" + targetZ + ".dat", FileMode.Open));
-            br.Read(tempGeometry, 0, fileBlockSize * fileXNum * fileZNum * fileYNum);
+            br.Read(tempGeometry, 0, fileBlockSize);
             curLoadedMem.Add(new KeyValuePair<int, int>(targetX, targetZ), tempGeometry);
             br.Close();
             curLoadedMemPairList.Add(new KeyValuePair<int, int>(targetX, targetZ));
         }
-        catch(IOException e)
-            {
+        catch (IOException e)
+        {
             Debug.Log(e.Message + "\n Cannot read temp file. LoadTempGeometry");
         }
     }
 
+    //mem to prefab
+    public void LoadMemGeometry(int targetX, int targetZ)
+    {
+        Byte[] bytes;
+        curLoadedMem.TryGetValue(new KeyValuePair<int, int>(targetX, targetZ), out bytes);
+        //instance
+        int startIndex = 0;
+        Quaternion targetQuat = new Quaternion();
+        Vector3 targetPosition = new Vector3();
+
+        Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]> targetXZDictionary = new Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]>();
+
+        for (int x = targetX * fileXNum; x < targetX * fileXNum + fileXNum; x++)
+        {
+            targetPosition.x = x;
+            for (int z = targetZ * fileZNum; z < targetZ * fileZNum + fileZNum; z++)
+            {
+                targetPosition.z = z;
+                BlockPrefabClass[] blockPrefabClassArray = new BlockPrefabClass[fileYNum];
+                for (int y = 0; y < fileYNum; y++)
+                {
+                    blockPrefabClassArray[y] = new BlockPrefabClass();
+                    targetPosition.y = y;
+                    int loadedGeoType = BitConverter.ToInt32(bytes, startIndex);    //todo : invalid int
+                    startIndex += 4;
+                    bool loadedInstant = BitConverter.ToBoolean(bytes, startIndex);    //todo : invalid int
+                    startIndex += 1;
+                    if (loadedGeoType == 0)
+                    {
+
+                        //air
+                        blockPrefabClassArray[y].isAir = true;
+                        blockPrefabClassArray[y].blockType = loadedGeoType;
+                        blockPrefabClassArray[y].gameObject = null;
+                        blockPrefabClassArray[y].isInstantize = false;
+                        blockPrefabClassArray[y].isRender = false;
+                    }
+                    else
+                    {
+                        //dirt
+
+                        blockPrefabClassArray[y].isAir = false;
+                        blockPrefabClassArray[y].blockType = loadedGeoType;
+
+                        if (loadedInstant)
+                        {
+                            blockPrefabClassArray[y].gameObject = Instantiate(geoPrefab[loadedGeoType], targetPosition, targetQuat);
+                            MeshRenderer meshRenderer = blockPrefabClassArray[y].gameObject.GetComponent<MeshRenderer>();
+                            MeshCollider meshCollider = blockPrefabClassArray[y].gameObject.GetComponent<MeshCollider>();
+
+
+                            meshRenderer.enabled = true;
+                            meshCollider.enabled = true;
+                            blockPrefabClassArray[y].isInstantize = true;
+                            blockPrefabClassArray[y].isRender = true;
+                        }
+                        else
+                        {
+                            blockPrefabClassArray[y].gameObject = null;
+                            blockPrefabClassArray[y].isInstantize = false;
+                            blockPrefabClassArray[y].isRender = false;
+                        }
+                    }
+                }
+                targetXZDictionary.Add(new KeyValuePair<int, int>(x, z), blockPrefabClassArray);
+            }
+
+
+        }
+        //public Dictionary<KeyValuePair<int, int>,  Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]>  > curLoadedPrefab
+        //curLoadedPrefab.Add(new KeyValuePair<int, int>(targetX, targetZ), targetXZDictionary);    //prefab list add
+
+        curLoadedPrefab.Add(new KeyValuePair<int, int>(targetX, targetZ), targetXZDictionary);    //add dictionary(<realx, realz>, array)
+        curLoadedPrefabPairList.Add(new KeyValuePair<int, int>(targetX, targetZ));  //pair list add
+    }
+
+
+
+    public void SavePrefabGeometry(int targetX, int targetZ)
+    {
+        Byte[] bytes;
+        curLoadedMem.TryGetValue(new KeyValuePair<int, int>(targetX, targetZ), out bytes);
+
+        //instance
+        int startIndex = 0;
+        Quaternion targetQuat = new Quaternion();
+        Vector3 targetPosition = new Vector3();
+
+        Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]> targetXZDictionary;
+        curLoadedPrefab.TryGetValue(new KeyValuePair<int, int>(targetX, targetZ), out targetXZDictionary);
+
+        for (int x = targetX * fileXNum; x < targetX * fileXNum + fileXNum; x++)
+        {
+            targetPosition.x = x;
+            for (int z = targetZ * fileZNum; z < targetZ * fileZNum + fileZNum; z++)
+            {
+                targetPosition.z = z;
+                
+                BlockPrefabClass[] blockPrefabClassArray;
+                targetXZDictionary.TryGetValue(new KeyValuePair<int, int>(x, z), out blockPrefabClassArray);
+                for (int y = 0; y < fileYNum; y++)
+                {
+                    targetPosition.y = y;
+                    BlockPrefabClass bpc = blockPrefabClassArray[y];
+
+                    Byte[] saveBytes = BitConverter.GetBytes(bpc.blockType);
+                    if (!BitConverter.IsLittleEndian)
+                        Array.Reverse(bytes);
+                    for(int i=0; i<saveBytes.Length; i++, startIndex++)
+                    {
+                        bytes[startIndex] = saveBytes[i];
+                    }
+
+                    saveBytes = BitConverter.GetBytes(bpc.isInstantize);
+                    if (!BitConverter.IsLittleEndian)
+                        Array.Reverse(bytes);
+                    for (int i = 0; i < saveBytes.Length; i++, startIndex++)
+                    {
+                        bytes[startIndex] = saveBytes[i];
+                    }
+
+                    if(bpc.gameObject != null)
+                    {
+                        //remove gameobjcet
+                        Destroy(bpc.gameObject);
+                    }
+                    
+                }
+                blockPrefabClassArray = null;
+                targetXZDictionary.Remove(new KeyValuePair<int, int>(x, z));
+            }
+        }
+
+        targetXZDictionary = null;
+
+        curLoadedPrefab.Remove(new KeyValuePair<int, int>(targetX, targetZ));
+        curLoadedPrefabPairList.Remove(new KeyValuePair<int, int>(targetX, targetZ));
+    }
+
+
+    //temp to mem
+    public void SaveMemGeometry(int targetX, int targetZ)
+    {
+        byte[] tempGeometry = null;
+        curLoadedMem.TryGetValue(new KeyValuePair<int, int>(targetX, targetZ), out tempGeometry);
+        //tempGeometry = new byte[fileBlockSize * fileXNum * fileZNum * fileYNum];
+        BinaryWriter bw;
+        try
+        {
+            bw = new BinaryWriter(new FileStream(Application.persistentDataPath + "/temp_map_" + targetX + "_" + targetZ + ".dat", FileMode.Create));
+            bw.Write(tempGeometry, 0, fileBlockSize);
+            curLoadedMem.Remove(new KeyValuePair<int, int>(targetX, targetZ));
+            bw.Close();
+            curLoadedMemPairList.Remove(new KeyValuePair<int, int>(targetX, targetZ));
+        }
+        catch (IOException e)
+        {
+            Debug.Log(e.Message + "\n Cannot read temp file. LoadTempGeometry");
+        }
+    }
+
+    public void SaveAllTempGeometry()
+    {
+        IEnumerator<KeyValuePair<int, int>> enumerator = curLoadedTempFilePairList.GetEnumerator();
+        byte[] tempGeometry = new byte[fileBlockSize]; ;
+        while (enumerator.MoveNext())
+        {
+            int targetX = enumerator.Current.Key;
+            int targetZ = enumerator.Current.Value;
+
+            try
+            {
+                BinaryReader br = new BinaryReader(new FileStream(Application.persistentDataPath + "/temp_map_" + targetX + "_" + targetZ + ".dat", FileMode.Open));
+                br.Read(tempGeometry, 0, fileBlockSize);
+                br.Close();
+            }
+            catch (IOException e)
+            {
+                Debug.Log(e.Message + "\n Cannot open temp file. SaveAllTempGeometry");
+            }
+
+            try
+            {
+                BinaryWriter bw = new BinaryWriter(new FileStream(Application.persistentDataPath + "/map_" + targetX + "_" + targetZ + ".dat", FileMode.Create));
+                bw.Write(tempGeometry, 0, fileBlockTypeSize * fileXNum * fileZNum * fileYNum);
+                bw.Close();
+            }
+            catch (IOException e)
+            {
+                Debug.Log(e.Message + "\n Cannot create origin file. SaveAllTempGeometry");
+            }
+        }
+    }
+
+    public void DeletAddTempGeometry()
+    {
+        IEnumerator<KeyValuePair<int, int>> enumerator = curLoadedTempFilePairList.GetEnumerator();
+
+        
+        while (enumerator.MoveNext())
+        {
+            int targetX = enumerator.Current.Key;
+            int targetZ = enumerator.Current.Value;
+
+            File.Delete(Application.persistentDataPath + "/temp_map_" + targetX + "_" + targetZ + ".dat");
+            
+        }
+    }
+
+
+    public void SaveGame()
+    {
+        SavePlayerInfo();
+
+        HashSet<KeyValuePair<int, int>> test = new HashSet<KeyValuePair<int, int>>(curLoadedPrefabPairList);
+        IEnumerator<KeyValuePair<int, int>> enumerator = new HashSet<KeyValuePair<int, int>>(curLoadedPrefabPairList).GetEnumerator();
+        bool isEnumNotEmpty = enumerator.MoveNext();
+        while (isEnumNotEmpty)
+        {
+            SavePrefabGeometry(enumerator.Current.Key, enumerator.Current.Value);
+            isEnumNotEmpty = enumerator.MoveNext();
+        }
+
+        enumerator = new HashSet<KeyValuePair<int, int>>(curLoadedMemPairList).GetEnumerator();
+        isEnumNotEmpty = enumerator.MoveNext();
+        while (isEnumNotEmpty)
+        {
+            SaveMemGeometry(enumerator.Current.Key, enumerator.Current.Value);
+            isEnumNotEmpty = enumerator.MoveNext();
+        }
+
+        SaveAllTempGeometry();
+
+        DeletAddTempGeometry();
+    }
+
+
+
+    
 
     //create new temp map
     public bool CreateTempMap(int targetX, int targetZ, ref byte[] outByte)
@@ -511,8 +881,6 @@ public class SceneManager : MonoBehaviour {
                         outByte[index] = boolByte[i];
                     }
                 }
-
-                
             }
         }
 
@@ -520,7 +888,7 @@ public class SceneManager : MonoBehaviour {
         try
         {
             bw = new BinaryWriter(new FileStream(Application.persistentDataPath + "/temp_map_" + targetX + "_" + targetZ + ".dat", FileMode.CreateNew));
-            bw.Write(outByte, 0, fileBlockSize * fileXNum * fileZNum * fileYNum);
+            bw.Write(outByte, 0, fileBlockSize);
             bw.Close();
             curLoadedTempFilePairList.Add(new KeyValuePair<int, int>(targetX, targetZ));
         }
@@ -530,6 +898,33 @@ public class SceneManager : MonoBehaviour {
             return false;
         }
         return true;
+    }
+
+
+    public void GetPlayerTarget(Vector3 userPosition, out int outPlayerBlockTargetX, out int outPlayerBlockTargetZ)
+    {
+        outPlayerBlockTargetX = ((int)userPosition.x);
+        outPlayerBlockTargetZ = ((int)userPosition.z);
+        if (outPlayerBlockTargetX < 0)
+        {
+            outPlayerBlockTargetX -= (fileXNum - 1);
+        }
+        if (outPlayerBlockTargetZ < 0)
+        {
+            outPlayerBlockTargetZ -= (fileZNum - 1);
+        }
+        outPlayerBlockTargetX /= fileXNum;
+        outPlayerBlockTargetZ /= fileZNum;
+        
+    }
+
+    void OnApplicationQuit()
+    {
+        StopCoroutine(corutineMainGeometry);
+        StopCoroutine(corutineLoadGeometry);
+        StopCoroutine(corutineSaveGeometry);
+        SaveGame();
+        //Debug.Log("Application ending after " + Time.time + " seconds");
     }
 
 }
@@ -547,6 +942,35 @@ public class BlockPrefabClass
 [Serializable]
 public class PlayerData
 {
-    public Vector3 pos;
-    public Quaternion quat;
+    public float posX, posY, posZ;
+    //public Vector3 seraillizePos;
+    public float quatX, quatY, quatZ, quatW;
+    //public Quaternion seraillzeQuat = new Quaternion();
+    
 }
+
+/*  self reference
+  while (isMemGeoLoop)
+            {
+                //check object will be loaded to mem is in temp
+                if (!curLoadedMemPairList.Contains(new KeyValuePair<int, int>(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value)))
+                {
+                    if (curLoadedTempFilePairList.Contains(new KeyValuePair<int, int>(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value)))
+                    {
+                        //load mem
+                        LoadTempGeometry(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value);
+                    }
+                    else
+                    {
+                        //not in temp. Need to wait temp load.
+                        break;
+                    }
+                }
+                else
+                {
+                    //already has mem
+                }
+                isMemGeoLoop = memGeoEnumerator.MoveNext();
+                yield return new WaitForSeconds(0.2f);
+            }
+ */

@@ -491,6 +491,7 @@ GameObject:
   - component: {fileID: 2135268491}
   - component: {fileID: 2135268493}
   - component: {fileID: 2135268492}
+  - component: {fileID: 2135268494}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -527,6 +528,8 @@ MonoBehaviour:
   geoPrefab:
   - {fileID: 1064690784228954, guid: 3a8199b743b3a2f45950c1a907e508d4, type: 2}
   - {fileID: 1833548132896064, guid: 5a01fddd79183a948a117e757849c2d0, type: 2}
+  playerBlockOriginTargetX: 0
+  playerBlockOriginTargetZ: 0
 --- !u!114 &2135268493
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -536,5 +539,16 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6f5941a1c939ead48af3b377da897738, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &2135268494
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  m_GameObject: {fileID: 2135268490}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 501847def1099f14a87210ad3a052482, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
