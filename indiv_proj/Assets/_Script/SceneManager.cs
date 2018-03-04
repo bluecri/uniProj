@@ -52,11 +52,12 @@ public class SceneManager : MonoBehaviour {
         if (instance == null)
         {
             instance = this;
-            DontDestroyOnLoad(instance);
+            
         }
         else if(instance != this)
         {
             Destroy(gameObject);
+            DontDestroyOnLoad(instance);
         }
 
         //constant
@@ -141,7 +142,7 @@ public class SceneManager : MonoBehaviour {
             {
                 //stop 2 corutine
                 StopCoroutine(corutineLoadGeometry);
-                //StopCoroutine(corutineSaveGeometry);
+                StopCoroutine(corutineSaveGeometry);
 
                 //origin block target X, Z update
                 playerBlockOriginTargetX = playerBlockTargetX;
@@ -170,37 +171,6 @@ public class SceneManager : MonoBehaviour {
         HashSet<KeyValuePair<int, int>> needToLoadPrefabGeoSetForLoop = new HashSet<KeyValuePair<int, int>>();
         //HashSet<KeyValuePair<int, int>> needToLoadPrefabGeoSetForCompare; //change to list is better performance?
 
-
-        for (int i = 0; i < preLoadOnTempGeometryIndex.Length / 2; i++)
-        {
-            int accX = preLoadOnTempGeometryIndex[i, 0];
-            int accZ = preLoadOnTempGeometryIndex[i, 1];
-            int targetX = accX + playerBlockOriginTargetX;
-            int targetZ = accZ + playerBlockOriginTargetZ;
-            needToLoadTempGeoSetForLoop.Add(new KeyValuePair<int, int>(targetX, targetZ));
-        }
-        needToLoadTempGeoSetForLoop.ExceptWith(curLoadedTempFilePairList); //target temp geo - cur loaded temp geo = need to load temp geo
-        //needToLoadTempGeoSetForCompare = new HashSet<KeyValuePair<int, int>>(needToLoadTempGeoSetForLoop);
-        IEnumerator<KeyValuePair<int, int>> tempGeoEnumerator = needToLoadTempGeoSetForLoop.GetEnumerator();
-        tempGeoEnumerator.Reset();
-        bool isTempGeoLoop = tempGeoEnumerator.MoveNext();
-
-
-        for (int i = 0; i < preLoadOnMemGeometryIndex.Length / 2; i++)
-        {
-            int accX = preLoadOnMemGeometryIndex[i, 0];
-            int accZ = preLoadOnMemGeometryIndex[i, 1];
-            int targetX = accX + playerBlockOriginTargetX;
-            int targetZ = accZ + playerBlockOriginTargetZ;
-            needToLoadMemGeoSetForLoop.Add(new KeyValuePair<int, int>(targetX, targetZ));
-        }
-        needToLoadMemGeoSetForLoop.ExceptWith(curLoadedMemPairList); //target temp geo - cur loaded temp geo = need to load temp geo
-        //needToLoadMemGeoSetForCompare = new HashSet<KeyValuePair<int, int>>(needToLoadMemGeoSetForLoop);
-        IEnumerator<KeyValuePair<int, int>> memGeoEnumerator = needToLoadMemGeoSetForLoop.GetEnumerator();
-        memGeoEnumerator.Reset();
-        bool isMemGeoLoop = memGeoEnumerator.MoveNext();
-
-
         for (int i = 0; i < preLoadOnPrefabGeometryIndex.Length / 2; i++)
         {
             int accX = preLoadOnPrefabGeometryIndex[i, 0];
@@ -215,6 +185,111 @@ public class SceneManager : MonoBehaviour {
         prefabGeoEnumerator.Reset();
         bool isPrefabGeoLoop = prefabGeoEnumerator.MoveNext();
 
+        
+        //first prefab loop
+        while (isPrefabGeoLoop)
+        {
+            //check already in prefab
+            if (!curLoadedPrefabPairList.Contains(new KeyValuePair<int, int>(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value)))
+            {
+                //not has prefab. check mem exists
+                if (curLoadedMemPairList.Contains(new KeyValuePair<int, int>(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value)))
+                {
+                    //load mem to prefab
+                    LoadMemGeometry(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value);
+                    yield return new WaitForSeconds(0.1f);
+                }
+                else
+                {
+                    //not in temp. Need to temp load.
+                    if (curLoadedTempFilePairList.Contains(new KeyValuePair<int, int>(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value)))
+                    {
+                        //load temp to mem
+                        LoadTempGeometry(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value);
+                        yield return new WaitForSeconds(0.1f);
+                        //load mem to prefab
+                        LoadMemGeometry(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value);
+                        yield return new WaitForSeconds(0.1f);
+                    }
+                    else
+                    {
+                        //not in temp. Need to origin load.
+                        LoadOriginGeometry(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value);
+                        //load temp to mem
+                        LoadTempGeometry(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value);
+                        yield return new WaitForSeconds(0.1f);
+                        //load mem to prefab
+                        LoadMemGeometry(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value);
+                        yield return new WaitForSeconds(0.1f);
+                    }
+                }
+            }
+            else
+            {
+                //already has prefab
+            }
+            isPrefabGeoLoop = prefabGeoEnumerator.MoveNext();
+
+        }
+
+
+        //second mem loop
+        for (int i = 0; i < preLoadOnMemGeometryIndex.Length / 2; i++)
+        {
+            int accX = preLoadOnMemGeometryIndex[i, 0];
+            int accZ = preLoadOnMemGeometryIndex[i, 1];
+            int targetX = accX + playerBlockOriginTargetX;
+            int targetZ = accZ + playerBlockOriginTargetZ;
+            needToLoadMemGeoSetForLoop.Add(new KeyValuePair<int, int>(targetX, targetZ));
+        }
+        needToLoadMemGeoSetForLoop.ExceptWith(curLoadedMemPairList); //target temp geo - cur loaded temp geo = need to load temp geo
+        //needToLoadMemGeoSetForCompare = new HashSet<KeyValuePair<int, int>>(needToLoadMemGeoSetForLoop);
+        IEnumerator<KeyValuePair<int, int>> memGeoEnumerator = needToLoadMemGeoSetForLoop.GetEnumerator();
+        memGeoEnumerator.Reset();
+        bool isMemGeoLoop = memGeoEnumerator.MoveNext();
+
+        while (isMemGeoLoop)
+        {
+            //check already in mem
+            if (!curLoadedMemPairList.Contains(new KeyValuePair<int, int>(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value)))
+            {
+                if (curLoadedTempFilePairList.Contains(new KeyValuePair<int, int>(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value)))
+                {
+                    //load temp to mem
+                    LoadTempGeometry(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value);
+                }
+                else
+                {
+                    //not in temp. Need to origin load.
+                    LoadOriginGeometry(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value);
+                    yield return new WaitForSeconds(1.0f);
+                    //load temp to mem
+                    LoadTempGeometry(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value);
+                    yield return new WaitForSeconds(1.0f);
+                }
+            }
+            else
+            {
+                //already has mem
+            }
+            isMemGeoLoop = memGeoEnumerator.MoveNext();
+            yield return new WaitForSeconds(0.1f);
+        }
+
+        //last temp loop
+        for (int i = 0; i < preLoadOnTempGeometryIndex.Length / 2; i++)
+        {
+            int accX = preLoadOnTempGeometryIndex[i, 0];
+            int accZ = preLoadOnTempGeometryIndex[i, 1];
+            int targetX = accX + playerBlockOriginTargetX;
+            int targetZ = accZ + playerBlockOriginTargetZ;
+            needToLoadTempGeoSetForLoop.Add(new KeyValuePair<int, int>(targetX, targetZ));
+        }
+        needToLoadTempGeoSetForLoop.ExceptWith(curLoadedTempFilePairList); //target temp geo - cur loaded temp geo = need to load temp geo
+        //needToLoadTempGeoSetForCompare = new HashSet<KeyValuePair<int, int>>(needToLoadTempGeoSetForLoop);
+        IEnumerator<KeyValuePair<int, int>> tempGeoEnumerator = needToLoadTempGeoSetForLoop.GetEnumerator();
+        tempGeoEnumerator.Reset();
+        bool isTempGeoLoop = tempGeoEnumerator.MoveNext();
 
         while (isTempGeoLoop)
         {
@@ -222,67 +297,13 @@ public class SceneManager : MonoBehaviour {
             {
                 //load origin to temp or create temp.
                 LoadOriginGeometry(tempGeoEnumerator.Current.Key, tempGeoEnumerator.Current.Value);
+                yield return new WaitForSeconds(1.0f);
             }
-            else
-            {
-                //already has temp.
-            }
+
             isTempGeoLoop = tempGeoEnumerator.MoveNext();
-            yield return new WaitForSeconds(0.1f);
-
-            while (isMemGeoLoop)
-            {
-                //check already in mem
-                if (!curLoadedMemPairList.Contains(new KeyValuePair<int, int>(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value)))
-                {
-                    if (curLoadedTempFilePairList.Contains(new KeyValuePair<int, int>(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value)))
-                    {
-                        //load temp to mem
-                        LoadTempGeometry(memGeoEnumerator.Current.Key, memGeoEnumerator.Current.Value);
-                    }
-                    else
-                    {
-                        //not in temp. Need to wait temp load.
-                        break;
-                    }
-                }
-                else
-                {
-                    //already has mem
-                }
-                isMemGeoLoop = memGeoEnumerator.MoveNext();
-                yield return new WaitForSeconds(0.1f);
-
-
-                while (isPrefabGeoLoop)
-                {
-                    //check already in prefab
-                    if (!curLoadedPrefabPairList.Contains(new KeyValuePair<int, int>(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value)))
-                    {
-                        //check mem exists
-                        if (curLoadedMemPairList.Contains(new KeyValuePair<int, int>(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value)))
-                        {
-                            //load mem to prefab
-                            LoadMemGeometry(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value);
-                        }
-                        else
-                        {
-                            //not in temp. Need to wait temp load.
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        //already has mem
-                    }
-                    isPrefabGeoLoop = prefabGeoEnumerator.MoveNext();
-                    yield return new WaitForSeconds(0.1f);
-                }
-            }
         }
-
-        yield return new WaitForSeconds(1.0f);
     }
+
 
     IEnumerator SaveGeometryUpdateCorutine()
     {
@@ -307,23 +328,9 @@ public class SceneManager : MonoBehaviour {
         memGeoEnumerator.Reset();
         bool isMemGeoLoop = memGeoEnumerator.MoveNext();
 
+        yield return new WaitForSeconds(1.0f);
 
-        for (int i = 0; i < preLoadOnPrefabGeometryIndex.Length / 2; i++)
-        {
-            int accX = preLoadOnPrefabGeometryIndex[i, 0];
-            int accZ = preLoadOnPrefabGeometryIndex[i, 1];
-            int targetX = accX + playerBlockOriginTargetX;
-            int targetZ = accZ + playerBlockOriginTargetZ;
-            needToLoadPrefabGeoSetForLoop.Add(new KeyValuePair<int, int>(targetX, targetZ));
-        }
-        //need to save prefab = cur loaded prefab - need to load prefab
-        needToSaavePrefabGeoSetForLoop = new HashSet<KeyValuePair<int, int>>(curLoadedPrefabPairList);
-        needToSaavePrefabGeoSetForLoop.ExceptWith(needToLoadPrefabGeoSetForLoop);
-        IEnumerator<KeyValuePair<int, int>> prefabGeoEnumerator = needToSaavePrefabGeoSetForLoop.GetEnumerator();
-        prefabGeoEnumerator.Reset();
-        bool isPrefabGeoLoop = prefabGeoEnumerator.MoveNext();
-
-
+        //first remove only mem to temp
         while (isMemGeoLoop)
         {
             //check has mem
@@ -342,26 +349,47 @@ public class SceneManager : MonoBehaviour {
             {
                 //already deleted from mem to temp
             }
-            memGeoEnumerator.MoveNext();
-            yield return new WaitForSeconds(0.1f);
+            isMemGeoLoop = memGeoEnumerator.MoveNext();
+            yield return new WaitForSeconds(1.0f);
+        }
+        
 
+
+        //second remove prefab to mem // if has prefab, cannot do mem->temp.
+
+        for (int i = 0; i < preLoadOnPrefabGeometryIndex.Length / 2; i++)
+        {
+            int accX = preLoadOnPrefabGeometryIndex[i, 0];
+            int accZ = preLoadOnPrefabGeometryIndex[i, 1];
+            int targetX = accX + playerBlockOriginTargetX;
+            int targetZ = accZ + playerBlockOriginTargetZ;
+            needToLoadPrefabGeoSetForLoop.Add(new KeyValuePair<int, int>(targetX, targetZ));
+        }
+        //need to save prefab = cur loaded prefab - need to load prefab
+        needToSaavePrefabGeoSetForLoop = new HashSet<KeyValuePair<int, int>>(curLoadedPrefabPairList);
+        needToSaavePrefabGeoSetForLoop.ExceptWith(needToLoadPrefabGeoSetForLoop);
+        IEnumerator<KeyValuePair<int, int>> prefabGeoEnumerator = needToSaavePrefabGeoSetForLoop.GetEnumerator();
+        prefabGeoEnumerator.Reset();
+
+        yield return new WaitForSeconds(1.0f);
+
+        bool isPrefabGeoLoop = prefabGeoEnumerator.MoveNext();
+        while (isPrefabGeoLoop)
+        {
             //check has prefab
             if (curLoadedPrefabPairList.Contains(new KeyValuePair<int, int>(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value)))
             {
                 SavePrefabGeometry(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value);
+                yield return new WaitForSeconds(1.0f);
+                SaveMemGeometry(prefabGeoEnumerator.Current.Key, prefabGeoEnumerator.Current.Value);
+                yield return new WaitForSeconds(1.0f);
             }
             else
             {
                 //already deleted prefab to mem
             }
-            prefabGeoEnumerator.MoveNext();
-            yield return new WaitForSeconds(0.1f);
+            isPrefabGeoLoop = prefabGeoEnumerator.MoveNext();
         }
-
-
-
-
-        yield return new WaitForSeconds(1.0f);
     }
 
     
