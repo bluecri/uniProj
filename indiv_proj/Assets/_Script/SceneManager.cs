@@ -8,6 +8,7 @@ using UnityEngine;
 public class SceneManager : MonoBehaviour {
     public static SceneManager instance = null;
     public static Player playerInstance = null;
+
     public GameObject playerPrefab;
     public GameObject[] geoPrefab;
 
