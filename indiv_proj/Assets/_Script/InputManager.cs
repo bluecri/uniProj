@@ -211,7 +211,16 @@ public class InputManager : MonoBehaviour {
                 playerScript.jumpKey = false;
             }
 
-            
+            if (Input.GetKey(KeyCode.F))
+            {
+                //jump
+                playerScript.slideKey = true;
+            }
+            else
+            {
+                playerScript.slideKey = false;
+            }
+
             if (Input.GetKeyDown(KeyCode.P))
             {
                 //change camera

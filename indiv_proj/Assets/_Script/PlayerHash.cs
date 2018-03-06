@@ -10,6 +10,7 @@ public class PlayerHash : MonoBehaviour {
     public static int JumpAirID;
     public static int JumpEndID;
     public static int FindStartID;
+    public static int FindAirID;
     public static int FindEndID;
     public static int AttackID;
     public static int SlideID;
@@ -18,7 +19,12 @@ public class PlayerHash : MonoBehaviour {
     public static int StunID;
     public static int KnockoutID;
     public static int LoseID;
+    public static int MiningStartID;
+    public static int MiningEndID;
 
+
+    public static int BlockLayer = 10;
+    public static int PlayerLayer = 13;
 
     void Awake()
     {
@@ -29,6 +35,7 @@ public class PlayerHash : MonoBehaviour {
         JumpAirID = Animator.StringToHash("JumpAir");
         JumpEndID = Animator.StringToHash("JumpEnd");
         FindStartID = Animator.StringToHash("FindStart");
+        FindAirID = Animator.StringToHash("FindAir");
         FindEndID = Animator.StringToHash("FindEnd");
         AttackID = Animator.StringToHash("Attack");
         SlideID = Animator.StringToHash("Slide");
@@ -37,6 +44,8 @@ public class PlayerHash : MonoBehaviour {
         StunID = Animator.StringToHash("Stun");
         KnockoutID = Animator.StringToHash("Knockout");
         LoseID = Animator.StringToHash("Lose");
+        MiningStartID = Animator.StringToHash("MiningStart");
+        MiningEndID = Animator.StringToHash("MiningEnd");
     }
     // Use this for initialization
     void Start () {

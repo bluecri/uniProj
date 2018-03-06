@@ -262,6 +262,7 @@ GameObject:
   - component: {fileID: 4530669591196546}
   - component: {fileID: 20870115666451240}
   - component: {fileID: 124773656599307898}
+  - component: {fileID: 45717198231245918}
   m_Layer: 13
   m_Name: CharCamera
   m_TagString: MainCamera
@@ -428,11 +429,11 @@ GameObject:
   m_Component:
   - component: {fileID: 4809174465265704}
   - component: {fileID: 95830549629945660}
-  - component: {fileID: 65004006093171150}
   - component: {fileID: 54476079063533882}
   - component: {fileID: 114956384081533496}
   - component: {fileID: 81943688125741894}
   - component: {fileID: 114584049327923518}
+  - component: {fileID: 136509940051067818}
   m_Layer: 13
   m_Name: Player
   m_TagString: Player
@@ -811,6 +812,7 @@ GameObject:
   - component: {fileID: 4533367522232390}
   - component: {fileID: 20882334620543786}
   - component: {fileID: 124634951528255714}
+  - component: {fileID: 45598975108715224}
   m_Layer: 13
   m_Name: UpViewCamera
   m_TagString: MainCamera
@@ -2129,7 +2131,7 @@ Transform:
   m_PrefabParentObject: {fileID: 0}
   m_PrefabInternal: {fileID: 100100000}
   m_GameObject: {fileID: 1332066158049930}
-  m_LocalRotation: {x: -0.0059114317, y: -0.6794483, z: 0.73369926, w: -0.0006656347}
+  m_LocalRotation: {x: -0.0059114313, y: -0.6794483, z: 0.73369926, w: -0.0006656347}
   m_LocalPosition: {x: -0.14276123, y: 0.032653574, z: 0.13977996}
   m_LocalScale: {x: 1.0000001, y: 1.0000001, z: 1.0000001}
   m_Children: []
@@ -2835,7 +2837,7 @@ Transform:
   m_PrefabInternal: {fileID: 100100000}
   m_GameObject: {fileID: 1250298735248534}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -7.9175787, y: 18.745968, z: 30.868374}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children:
   - {fileID: 4564963477561064}
@@ -3170,6 +3172,22 @@ Camera:
   m_OcclusionCulling: 1
   m_StereoConvergence: 10
   m_StereoSeparation: 0.022
+--- !u!45 &45598975108715224
+Skybox:
+  m_ObjectHideFlags: 1
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 100100000}
+  m_GameObject: {fileID: 1476273037583906}
+  m_Enabled: 1
+  m_CustomSkybox: {fileID: 2100000, guid: e222162ddb8d34547a133b673221b195, type: 2}
+--- !u!45 &45717198231245918
+Skybox:
+  m_ObjectHideFlags: 1
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 100100000}
+  m_GameObject: {fileID: 1122739825235060}
+  m_Enabled: 1
+  m_CustomSkybox: {fileID: 2100000, guid: e222162ddb8d34547a133b673221b195, type: 2}
 --- !u!54 &54476079063533882
 Rigidbody:
   m_ObjectHideFlags: 1
@@ -3185,18 +3203,6 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 80
   m_CollisionDetection: 0
---- !u!65 &65004006093171150
-BoxCollider:
-  m_ObjectHideFlags: 1
-  m_PrefabParentObject: {fileID: 0}
-  m_PrefabInternal: {fileID: 100100000}
-  m_GameObject: {fileID: 1250298735248534}
-  m_Material: {fileID: 0}
-  m_IsTrigger: 0
-  m_Enabled: 1
-  serializedVersion: 2
-  m_Size: {x: 0.8, y: 1, z: 0.7}
-  m_Center: {x: 0, y: 0.5, z: -0.09}
 --- !u!81 &81943688125741894
 AudioListener:
   m_ObjectHideFlags: 1
@@ -3250,14 +3256,24 @@ MonoBehaviour:
   verticalRotationSpeed: 2
   minCharViewVerticalRotation: -179
   maxCharViewVerticalRotation: 179
-  moveSpeed: 5
+  noRunSpeed: 1
+  runSpeed: 2
+  jumpMoveSpeed: 0.8
   mouseVerticalMovement: 0
   mouseHorizontalMovement: 0
   upKey: 0
   downKey: 0
   leftKey: 0
   rightKey: 0
-  runInput: 0
+  runKey: 0
+  jumpKey: 0
+  slideKey: 0
+  leftMouseKey: 0
+  leftMouseKeyUp: 0
+  leftMouseKeyDown: 0
+  rightMouseKey: 0
+  rightMouseKeyup: 0
+  rightMouseKeyDown: 0
   playerAnimator: {fileID: 0}
   isNewState: 0
   curState: 0
@@ -3275,6 +3291,19 @@ Behaviour:
   m_PrefabInternal: {fileID: 100100000}
   m_GameObject: {fileID: 1122739825235060}
   m_Enabled: 1
+--- !u!136 &136509940051067818
+CapsuleCollider:
+  m_ObjectHideFlags: 1
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 100100000}
+  m_GameObject: {fileID: 1250298735248534}
+  m_Material: {fileID: 0}
+  m_IsTrigger: 0
+  m_Enabled: 1
+  m_Radius: 0.25
+  m_Height: 1
+  m_Direction: 1
+  m_Center: {x: 0, y: 0.45, z: 0}
 --- !u!137 &137503163480210984
 SkinnedMeshRenderer:
   m_ObjectHideFlags: 1

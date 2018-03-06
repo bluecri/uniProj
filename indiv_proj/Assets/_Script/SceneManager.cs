@@ -8,9 +8,9 @@ using UnityEngine;
 public class SceneManager : MonoBehaviour {
     public static SceneManager instance = null;
     public static Player playerInstance = null;
-
+    
     public GameObject playerPrefab;
-    public GameObject[] geoPrefab;
+    //public GameObject[] geoPrefab;
 
     public const int fileXNum = 16;
     public const int fileZNum = 16;
@@ -34,7 +34,7 @@ public class SceneManager : MonoBehaviour {
     public Dictionary<KeyValuePair<int, int>, byte[]> curLoadedMem = new Dictionary<KeyValuePair<int, int>, byte[]>();
 
     public HashSet<KeyValuePair<int, int>> curLoadedPrefabPairList = new HashSet<KeyValuePair<int, int>>();
-    public Dictionary<KeyValuePair<int, int>, Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]>> curLoadedPrefab = new Dictionary<KeyValuePair<int, int>, Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]>> ();
+    public Dictionary<KeyValuePair<int, int>, Dictionary<KeyValuePair<int, int>, BlockPrefabInfoInMemClass[]>> curLoadedPrefab = new Dictionary<KeyValuePair<int, int>, Dictionary<KeyValuePair<int, int>, BlockPrefabInfoInMemClass[]>> ();
 
 
     public int playerBlockOriginTargetX = 0;
@@ -618,7 +618,7 @@ public class SceneManager : MonoBehaviour {
         Quaternion targetQuat = new Quaternion();
         Vector3 targetPosition = new Vector3();
 
-        Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]> targetXZDictionary = new Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]>();
+        Dictionary<KeyValuePair<int, int>, BlockPrefabInfoInMemClass[]> targetXZDictionary = new Dictionary<KeyValuePair<int, int>, BlockPrefabInfoInMemClass[]>();
 
         for (int x = targetX * fileXNum; x < targetX * fileXNum + fileXNum; x++)
         {
@@ -626,10 +626,10 @@ public class SceneManager : MonoBehaviour {
             for (int z = targetZ * fileZNum; z < targetZ * fileZNum + fileZNum; z++)
             {
                 targetPosition.z = z;
-                BlockPrefabClass[] blockPrefabClassArray = new BlockPrefabClass[fileYNum];
+                BlockPrefabInfoInMemClass[] blockPrefabClassArray = new BlockPrefabInfoInMemClass[fileYNum];
                 for (int y = 0; y < fileYNum; y++)
                 {
-                    blockPrefabClassArray[y] = new BlockPrefabClass();
+                    blockPrefabClassArray[y] = new BlockPrefabInfoInMemClass();
                     targetPosition.y = y;
                     int loadedGeoType = BitConverter.ToInt32(bytes, startIndex);    //todo : invalid int
                     startIndex += 4;
@@ -654,7 +654,8 @@ public class SceneManager : MonoBehaviour {
 
                         if (loadedInstant)
                         {
-                            blockPrefabClassArray[y].gameObject = Instantiate(geoPrefab[loadedGeoType], targetPosition, targetQuat);
+                            //blockPrefabClassArray[y].gameObject = Instantiate(geoPrefab[loadedGeoType], targetPosition, targetQuat);
+                            blockPrefabClassArray[y].gameObject = BlockPool.instance.GetGameObjectFromPool(loadedGeoType, targetPosition, targetQuat);
                             MeshRenderer meshRenderer = blockPrefabClassArray[y].gameObject.GetComponent<MeshRenderer>();
                             MeshCollider meshCollider = blockPrefabClassArray[y].gameObject.GetComponent<MeshCollider>();
 
@@ -696,7 +697,7 @@ public class SceneManager : MonoBehaviour {
         Quaternion targetQuat = new Quaternion();
         Vector3 targetPosition = new Vector3();
 
-        Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]> targetXZDictionary;
+        Dictionary<KeyValuePair<int, int>, BlockPrefabInfoInMemClass[]> targetXZDictionary;
         curLoadedPrefab.TryGetValue(new KeyValuePair<int, int>(targetX, targetZ), out targetXZDictionary);
 
         for (int x = targetX * fileXNum; x < targetX * fileXNum + fileXNum; x++)
@@ -706,12 +707,12 @@ public class SceneManager : MonoBehaviour {
             {
                 targetPosition.z = z;
                 
-                BlockPrefabClass[] blockPrefabClassArray;
+                BlockPrefabInfoInMemClass[] blockPrefabClassArray;
                 targetXZDictionary.TryGetValue(new KeyValuePair<int, int>(x, z), out blockPrefabClassArray);
                 for (int y = 0; y < fileYNum; y++)
                 {
                     targetPosition.y = y;
-                    BlockPrefabClass bpc = blockPrefabClassArray[y];
+                    BlockPrefabInfoInMemClass bpc = blockPrefabClassArray[y];
 
                     Byte[] saveBytes = BitConverter.GetBytes(bpc.blockType);
                     if (!BitConverter.IsLittleEndian)
@@ -732,7 +733,8 @@ public class SceneManager : MonoBehaviour {
                     if(bpc.gameObject != null)
                     {
                         //remove gameobjcet
-                        Destroy(bpc.gameObject);
+                        //Destroy(bpc.gameObject);
+                        BlockPool.instance.ReturnGameObjectToPool(bpc.gameObject, bpc.blockType);
                     }
                     
                 }
@@ -973,8 +975,8 @@ public class SceneManager : MonoBehaviour {
         targetZ /= fileZNum;
 
         //if block targetx, targety in prefabList
-        Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]> targetBlockDictionary;
-        BlockPrefabClass[] yBlockClassesWithXZ;
+        Dictionary<KeyValuePair<int, int>, BlockPrefabInfoInMemClass[]> targetBlockDictionary;
+        BlockPrefabInfoInMemClass[] yBlockClassesWithXZ;
         if (curLoadedPrefab.TryGetValue(new KeyValuePair<int, int>(targetX, targetZ), out targetBlockDictionary))
         {
             if (targetBlockDictionary.TryGetValue(new KeyValuePair<int, int>(x, z), out yBlockClassesWithXZ))
@@ -1002,7 +1004,7 @@ public class SceneManager : MonoBehaviour {
     }
 
     //get block x,y,z ref
-    public bool IsBlockObjectExists(int x, int y, int z, out BlockPrefabClass bpcRef)
+    public bool IsBlockObjectExists(int x, int y, int z, out BlockPrefabInfoInMemClass bpcRef)
     {
         int targetX = x, targetZ = z;
 
@@ -1018,8 +1020,8 @@ public class SceneManager : MonoBehaviour {
         targetZ /= fileZNum;
 
         //if block targetx, targety in prefabList
-        Dictionary<KeyValuePair<int, int>, BlockPrefabClass[]> targetBlockDictionary;
-        BlockPrefabClass[] yBlockClassesWithXZ;
+        Dictionary<KeyValuePair<int, int>, BlockPrefabInfoInMemClass[]> targetBlockDictionary;
+        BlockPrefabInfoInMemClass[] yBlockClassesWithXZ;
         if (curLoadedPrefab.TryGetValue(new KeyValuePair<int, int>(targetX, targetZ), out targetBlockDictionary))
         {
             if (targetBlockDictionary.TryGetValue(new KeyValuePair<int, int>(x, z), out yBlockClassesWithXZ))
@@ -1050,12 +1052,13 @@ public class SceneManager : MonoBehaviour {
 
     private void InstantizeBlock(int x, int y, int z)
     {
-        BlockPrefabClass bpc;
-        if (!IsBlockObjectExists(x , y, z, out bpc))
+        BlockPrefabInfoInMemClass bpc;
+        if (!IsBlockObjectExists(x, y, z, out bpc))
         {
-            if(bpc.blockType != 0)
+            //not air, not instantized yet... -> instsant
+            if(bpc.blockType != 0 && bpc.isInstantize == false)
             {
-                bpc.gameObject = Instantiate(geoPrefab[bpc.blockType], new Vector3(x, y, z), new Quaternion());
+                bpc.gameObject = BlockPool.instance.GetGameObjectFromPool(bpc.blockType, new Vector3(x, y, z), new Quaternion());
                 MeshRenderer meshRenderer = bpc.gameObject.GetComponent<MeshRenderer>();
                 MeshCollider meshCollider = bpc.gameObject.GetComponent<MeshCollider>();
 
@@ -1069,7 +1072,7 @@ public class SceneManager : MonoBehaviour {
 
     private void UnInstantizeCannotSeeBlock(int x, int y, int z)
     {
-        BlockPrefabClass bpc;
+        BlockPrefabInfoInMemClass bpc;
         if(IsBlockObjectExists(x - 1, y, z, out bpc))
         {
             /*
@@ -1183,7 +1186,7 @@ public class SceneManager : MonoBehaviour {
         {
             if(bpc.gameObject != null)
             {
-                Destroy(bpc.gameObject);
+                BlockPool.instance.ReturnGameObjectToPool(bpc.gameObject, bpc.blockType);
                 bpc.isInstantize = false;
                 bpc.gameObject = null;
             }
@@ -1194,7 +1197,7 @@ public class SceneManager : MonoBehaviour {
     public void AddBlock(int x, int y, int z, int blockGeoType)
     {
         
-        BlockPrefabClass bpc;
+        BlockPrefabInfoInMemClass bpc;
         if (IsBlockObjectExists(x, y, z, out bpc))
         {
             if (bpc.gameObject == null)
@@ -1204,7 +1207,7 @@ public class SceneManager : MonoBehaviour {
                 bpc.isAir = false;
                 bpc.blockType = blockGeoType;
 
-                bpc.gameObject = Instantiate(geoPrefab[blockGeoType], new Vector3(x, y, z), new Quaternion());
+                bpc.gameObject = BlockPool.instance.GetGameObjectFromPool(blockGeoType, new Vector3(x, y, z), new Quaternion());
                 MeshRenderer meshRenderer = bpc.gameObject.GetComponent<MeshRenderer>();
                 MeshCollider meshCollider = bpc.gameObject.GetComponent<MeshCollider>();
 
@@ -1243,7 +1246,7 @@ public class SceneManager : MonoBehaviour {
 
     public void DeleteBlock(int x, int y, int z)
     {
-        BlockPrefabClass bpc;
+        BlockPrefabInfoInMemClass bpc;
         if (IsBlockObjectExists(x, y, z, out bpc))
         {
             if (bpc.gameObject != null)
@@ -1261,7 +1264,7 @@ public class SceneManager : MonoBehaviour {
                 bpc.isAir = true;
                 bpc.blockType = 0;
 
-                Destroy(bpc.gameObject);
+                BlockPool.instance.ReturnGameObjectToPool(bpc.gameObject, bpc.blockType);
                 bpc.gameObject = null;
                 
                 bpc.isInstantize = false;
@@ -1279,9 +1282,51 @@ public class SceneManager : MonoBehaviour {
             Debug.Log("IsBlockObjectExists return false. DeleteBlock");
         }
     }
+    public void DeleteBlock(Vector3 position)
+    {
+        int x = (int)position.x;
+        int y = (int)position.y;
+        int z = (int)position.z;
+
+        BlockPrefabInfoInMemClass bpc;
+        if (IsBlockObjectExists(x, y, z, out bpc))
+        {
+            if (bpc.gameObject != null)
+            {
+                //instatize adj 6 blocks
+                //TODO : if deleted block is not FULL block... do not below call 6 func
+                InstantizeBlock(x - 1, y, z);
+                InstantizeBlock(x + 1, y, z);
+                InstantizeBlock(x, y + 1, z);
+                InstantizeBlock(x, y - 1, z);
+                InstantizeBlock(x, y, z - 1);
+                InstantizeBlock(x, y, z + 1);
+                //delete block
+
+                
+                BlockPool.instance.ReturnGameObjectToPool(bpc.gameObject, bpc.blockType);
+
+                bpc.gameObject = null;
+                bpc.isAir = true;
+                bpc.blockType = 0;
+                bpc.isInstantize = false;
+                bpc.isRender = false;
+
+            }
+            else
+            {
+                //no in prefab list.
+                Debug.Log("tried add block but already another block exists. DeleteBlock");
+            }
+        }
+        else
+        {
+            Debug.Log("IsBlockObjectExists return false. DeleteBlock");
+        }
+    }
 }
 
-public class BlockPrefabClass
+public class BlockPrefabInfoInMemClass
 {
     public bool isAir;      //remove
     public bool isInstantize;   //remove

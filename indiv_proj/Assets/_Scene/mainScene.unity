@@ -376,6 +376,53 @@ CanvasRenderer:
   m_PrefabParentObject: {fileID: 0}
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 626969926}
+--- !u!1 &742925650
+GameObject:
+  m_ObjectHideFlags: 0
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  serializedVersion: 5
+  m_Component:
+  - component: {fileID: 742925653}
+  - component: {fileID: 742925652}
+  m_Layer: 0
+  m_Name: BlockPool
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &742925652
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  m_GameObject: {fileID: 742925650}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1c0999e6b3c40794d9043aba5c58472b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  blockPrefabList:
+  - {fileID: 114073630736544996, guid: 5a01fddd79183a948a117e757849c2d0, type: 2}
+  - {fileID: 114555899583478466, guid: 8b26e4ec059c9de418d27a14b21745b0, type: 2}
+  - {fileID: 114731677884666882, guid: 532c1b4323089734abf0e0e339e599c3, type: 2}
+  - {fileID: 114173486036441228, guid: 3a8199b743b3a2f45950c1a907e508d4, type: 2}
+  defaultPoolCount: 20
+  incPoolCount: 10
+--- !u!4 &742925653
+Transform:
+  m_ObjectHideFlags: 0
+  m_PrefabParentObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  m_GameObject: {fileID: 742925650}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_RootOrder: 6
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1211380044
 GameObject:
   m_ObjectHideFlags: 0
@@ -571,9 +618,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   playerPrefab: {fileID: 1250298735248534, guid: 5466db2031f818a4487fe467a9df19fe,
     type: 2}
-  geoPrefab:
-  - {fileID: 1064690784228954, guid: 3a8199b743b3a2f45950c1a907e508d4, type: 2}
-  - {fileID: 1833548132896064, guid: 5a01fddd79183a948a117e757849c2d0, type: 2}
   playerBlockOriginTargetX: 0
   playerBlockOriginTargetZ: 0
 --- !u!114 &2135268493

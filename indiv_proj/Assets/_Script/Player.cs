@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class Player : MonoBehaviour {
+    
     public Camera charViewCamera;
     public Camera upViewCamera;
     public Rigidbody playerRigidbody;
@@ -11,9 +12,9 @@ public class Player : MonoBehaviour {
     public float verticalRotationSpeed = 10.0f;
     public float minCharViewVerticalRotation = -90;
     public float maxCharViewVerticalRotation = 90;
-    public float noRunSpeed = 1.0f;
-    public float runSpeed = 2.0f;
-    public float jumpMoveSpeed = 0.8f;
+    public float noRunSpeed = 1.5f;
+    public float runSpeed = 2.5f;
+    public float jumpMoveSpeed = 1.5f;
 
     public const float COMP_FLOAT_ERR = 0.0001f; 
 
@@ -36,7 +37,9 @@ public class Player : MonoBehaviour {
     public Animator playerAnimator;
     public enum PlayerState
     {
-        AnimLongIdleStartCorutine, AnimLongIdleEndCorutine, AnimMoveCorutine, AnimJumpStartCorutine, AnimJumpAirCorutine, AnimJumpEndCorutine
+        AnimLongIdleStartCorutine, AnimLongIdleEndCorutine, AnimMoveCorutine, AnimJumpStartCorutine, AnimJumpAirCorutine, AnimJumpEndCorutine, AnimSlideCorutine,
+        AnimAttackCorutine, AnimMiningStartCorutine, AnimMiningEndCorutine, AnimStunCorutine, AnimKnockoutCorutine, AnimFindStartCorutine,  AnimFindAirCorutine, AnimFindEndCorutine,
+        AnimInteractStartCorutine, AnimInteractEndCorutine
     }
     public bool isNewState = false;
     public PlayerState curState;
@@ -122,7 +125,35 @@ public class Player : MonoBehaviour {
                 case PlayerState.AnimJumpEndCorutine:
                     yield return StartCoroutine(AnimJumpEndCorutine());
                     break;
+                case PlayerState.AnimAttackCorutine:
+                    yield return StartCoroutine(AnimAttackCorutine());
+                    break;
+                case PlayerState.AnimMiningStartCorutine:
+                    yield return StartCoroutine(AnimMiningStartCorutine());
+                    break;
+                case PlayerState.AnimMiningEndCorutine:
+                    yield return StartCoroutine(AnimMiningEndCorutine());
+                    break;
+                case PlayerState.AnimStunCorutine:
+                    yield return StartCoroutine(AnimMiningEndCorutine());
+                    break;
+                case PlayerState.AnimKnockoutCorutine:
+                    yield return StartCoroutine(AnimMiningEndCorutine());
+                    break;
+                case PlayerState.AnimFindStartCorutine:
+                    yield return StartCoroutine(AnimFindStartCorutine());
+                    break;
+                case PlayerState.AnimFindAirCorutine:
+                    yield return StartCoroutine(AnimFindAirCorutine());
+                    break;
+                case PlayerState.AnimFindEndCorutine:
+                    yield return StartCoroutine(AnimFindEndCorutine());
+                    break;
+                case PlayerState.AnimSlideCorutine:
+                    yield return StartCoroutine(AnimSlideCorutine());
+                    break;
                 default:
+                    Debug.Log("out of anim switch!. check FSMMain");
                     yield return StartCoroutine(AnimMoveCorutine());
                     break;
 
@@ -152,6 +183,10 @@ public class Player : MonoBehaviour {
             
             //out idle animation
             if (upKey || downKey || leftKey || rightKey)
+            {
+                SetNewState(PlayerState.AnimLongIdleEndCorutine);
+            }
+            else if (jumpKey || leftMouseKey || rightMouseKey || slideKey)
             {
                 SetNewState(PlayerState.AnimLongIdleEndCorutine);
             }
@@ -241,6 +276,30 @@ public class Player : MonoBehaviour {
             {
                 SetNewState(PlayerState.AnimJumpStartCorutine);
             }
+
+            if (leftMouseKey)
+            {
+                //TODO : if has tool or weapon
+                //SetNewState(PlayerState.AnimAttackCorutine);
+                SetNewState(PlayerState.AnimMiningStartCorutine);
+                
+            }
+
+            if (rightMouseKey)
+            {
+                //TODO : if has tool or weapon
+                SetNewState(PlayerState.AnimFindStartCorutine);
+               
+            }
+
+            if (slideKey)
+            {
+                //TODO : if has tool or weapon
+                SetNewState(PlayerState.AnimSlideCorutine);
+                //SetNewState(PlayerState.AnimMiningStartCorutine);
+            }
+
+            //TODO : Stun, Knockout
         }
         while (!isNewState);    //check if state is changed in this corutine.
     }
@@ -380,6 +439,360 @@ public class Player : MonoBehaviour {
             {
                 SetNewState(PlayerState.AnimMoveCorutine);
                 jumpKey = false;    // for remove jumpkey input before jump end!
+            }
+            curTime += Time.deltaTime;
+        }
+        while (!isNewState);    //check if state is changed in this corutine.
+    }
+
+    IEnumerator AnimAttackCorutine()
+    {
+        playerAnimator.SetTrigger(PlayerHash.AttackID);
+
+        float animationPlayTime = 0.8f;
+        float curTime = 0.0f;
+        do
+        {
+            yield return null;
+            if (isNewState) { break; } //check if state is changed before start.
+
+            if (curTime > animationPlayTime)
+            {
+                SetNewState(PlayerState.AnimMoveCorutine);
+                leftMouseKey = false;    // for remove jumpkey input before jump end!
+            }
+            curTime += Time.deltaTime;
+        }
+        while (!isNewState);    //check if state is changed in this corutine.
+    }
+
+    /*
+     * Do Mining Animation. If block hp = 0, then get Item & destroy block
+    */
+    IEnumerator AnimMiningStartCorutine()
+    {
+        float animIntervalHitTime = 0.6f;
+        float animIntervalTime = 0.8f;
+        float curTime = 0.0f;
+        int blockHitCount = 0;
+        int blockHPCount = 0;
+
+        RaycastHit hit;
+        Ray ray;
+        Vector3 monitorCenterViewport = new Vector3(0.5f, 0.5f, 0f);    //ray with center of camera
+        float blockCheckDistance = 1.5f;                                //pick distance
+        GameObject recentBlockGameobject = null;                        
+        bool isBlockHPReset = true;
+        bool isBlockChecked = false;
+
+        playerAnimator.SetTrigger(PlayerHash.MiningStartID);
+        do
+        {
+            yield return null;
+            if (isNewState) { break; }      //check if state is changed before start.
+
+            // start block check
+            if (curTime > animIntervalHitTime && !isBlockChecked)
+            {
+                ray = charViewCamera.ViewportPointToRay(monitorCenterViewport);
+                if (Physics.Raycast(ray, out hit, blockCheckDistance))
+                {
+                    Transform objectHit = hit.transform;
+
+                    if(recentBlockGameobject == null || recentBlockGameobject != objectHit.gameObject)
+                    {
+                        recentBlockGameobject = objectHit.gameObject;
+                        blockHitCount = 1;
+                        blockHPCount = recentBlockGameobject.GetComponent<BlockPrefab>().m_hp;
+                        isBlockHPReset = recentBlockGameobject.GetComponent<BlockPrefab>().m_hpReset;
+
+                        if (!isBlockHPReset)
+                        {
+                            recentBlockGameobject.GetComponent<BlockPrefab>().m_hp -= 1;
+                        }
+                    }
+                    else
+                    {
+                        //same block.
+                        blockHitCount++;
+                        if (!isBlockHPReset)
+                        {
+                            recentBlockGameobject.GetComponent<BlockPrefab>().m_hp -= 1;
+                        }
+                        if (blockHitCount >= blockHPCount)
+                        {
+                            //remove block and make item.
+                            SceneManager.instance.DeleteBlock(recentBlockGameobject.transform.position);
+                            //TODO : item to inventory
+                            
+                        }
+                    }
+                }
+                isBlockChecked = true;
+            }
+            else if(curTime > animIntervalTime)
+            {
+                curTime = 0.0f;
+                isBlockChecked = false;
+            }
+
+            curTime += Time.deltaTime;
+            
+            if (!leftMouseKey)
+            {
+                SetNewState(PlayerState.AnimMiningEndCorutine);
+            }
+        }
+        while (!isNewState);    //check if state is changed in this corutine.
+    }
+
+    IEnumerator AnimMiningEndCorutine()
+    {
+        playerAnimator.SetTrigger(PlayerHash.MiningEndID);
+        do
+        {
+            yield return null;
+            if (isNewState) { break; } //check if state is changed before start.
+            leftMouseKey = false;
+            SetNewState(PlayerState.AnimMoveCorutine);
+        }
+        while (!isNewState);    //check if state is changed in this corutine.
+    }
+
+
+    /*
+     * Do interact motion. Setup block or open chest
+    */
+    IEnumerator AnimInteractStartCorutine()
+    {
+        float animIntervalHitTime = 0.6f;
+        float animIntervalTime = 0.8f;
+        float curTime = 0.0f;
+        int blockHitCount = 0;
+        int blockHPCount = 0;
+
+        RaycastHit hit;
+        Ray ray;
+        Vector3 monitorCenterViewport = new Vector3(0.5f, 0.5f, 0f);    //ray with center of camera
+        float blockCheckDistance = 1.5f;                                //pick distance
+        GameObject recentBlockGameobject = null;
+        bool isBlockHPReset = true;
+        bool isBlockChecked = false;
+
+        playerAnimator.SetTrigger(PlayerHash.MiningStartID);
+        do
+        {
+            yield return null;
+            if (isNewState) { break; }      //check if state is changed before start.
+
+            // start block check
+            if (curTime > animIntervalHitTime && !isBlockChecked)
+            {
+                ray = charViewCamera.ViewportPointToRay(monitorCenterViewport);
+                if (Physics.Raycast(ray, out hit, blockCheckDistance))
+                {
+                    Transform objectHit = hit.transform;
+
+                    if (recentBlockGameobject == null || recentBlockGameobject != objectHit.gameObject)
+                    {
+                        recentBlockGameobject = objectHit.gameObject;
+                        blockHitCount = 1;
+                        blockHPCount = recentBlockGameobject.GetComponent<BlockPrefab>().m_hp;
+                        isBlockHPReset = recentBlockGameobject.GetComponent<BlockPrefab>().m_hpReset;
+
+                        if (!isBlockHPReset)
+                        {
+                            recentBlockGameobject.GetComponent<BlockPrefab>().m_hp -= 1;
+                        }
+                    }
+                    else
+                    {
+                        //same block.
+                        blockHitCount++;
+                        if (!isBlockHPReset)
+                        {
+                            recentBlockGameobject.GetComponent<BlockPrefab>().m_hp -= 1;
+                        }
+                        if (blockHitCount >= blockHPCount)
+                        {
+                            //remove block and make item.
+                            SceneManager.instance.DeleteBlock(recentBlockGameobject.transform.position);
+                            //TODO : item to inventory
+
+                        }
+                    }
+                }
+                isBlockChecked = true;
+            }
+            else if (curTime > animIntervalTime)
+            {
+                curTime = 0.0f;
+                isBlockChecked = false;
+            }
+
+            curTime += Time.deltaTime;
+
+            if (!leftMouseKey)
+            {
+                SetNewState(PlayerState.AnimMiningEndCorutine);
+            }
+        }
+        while (!isNewState);    //check if state is changed in this corutine.
+    }
+
+    IEnumerator AnimInteractEndCorutine()
+    {
+        playerAnimator.SetTrigger(PlayerHash.MiningEndID);
+        do
+        {
+            yield return null;
+            if (isNewState) { break; } //check if state is changed before start.
+            leftMouseKey = false;
+            SetNewState(PlayerState.AnimMoveCorutine);
+        }
+        while (!isNewState);    //check if state is changed in this corutine.
+    }
+
+
+    IEnumerator AnimSlideCorutine()
+    {
+        float animationPlayTime = 1.4f;
+        float curTime = 0.0f;
+        float slideSpeed = 1.0f;
+
+        playerAnimator.SetTrigger(PlayerHash.SlideID);
+        do
+        {
+            yield return null;
+            if (isNewState) { break; } //check if state is changed before start.
+
+            lastMoveVector.Set(0.0f, 0.0f, 1.0f);
+            lastMoveVector *= slideSpeed * Time.deltaTime;
+            transform.position = transform.position += (transform.rotation * lastMoveVector);
+
+            if (curTime > animationPlayTime)
+            {
+                SetNewState(PlayerState.AnimMoveCorutine);
+            }
+            leftMouseKey = false;
+
+            curTime += Time.deltaTime;
+        }
+        while (!isNewState);    //check if state is changed in this corutine.
+    }
+
+    IEnumerator AnimStunCorutine()
+    {
+        float animationPlayTime = 1.1f;
+        float curTime = 0.0f;
+
+        playerAnimator.SetTrigger(PlayerHash.StunID);
+        do
+        {
+            yield return null;
+            if (isNewState) { break; } //check if state is changed before start.
+
+            if (curTime > animationPlayTime)
+            {
+                SetNewState(PlayerState.AnimMoveCorutine);
+            }
+            leftMouseKey = false;
+
+            curTime += Time.deltaTime;
+        }
+        while (!isNewState);    //check if state is changed in this corutine.
+    }
+
+    IEnumerator AnimKnockoutCorutine()
+    {
+        float animationPlayTime = 3.5f;
+        float curTime = 0.0f;
+
+        playerAnimator.SetTrigger(PlayerHash.KnockoutID);
+        do
+        {
+            yield return null;
+            if (isNewState) { break; } //check if state is changed before start.
+
+            if (curTime > animationPlayTime)
+            {
+                SetNewState(PlayerState.AnimMoveCorutine);
+            }
+            leftMouseKey = false;
+
+            curTime += Time.deltaTime;
+        }
+        while (!isNewState);    //check if state is changed in this corutine.
+    }
+
+
+    IEnumerator AnimFindStartCorutine()
+    {
+        
+        playerAnimator.SetTrigger(PlayerHash.FindStartID);
+
+        float animationPlayTime = 0.7f;
+        float curTime = 0.0f;
+        
+        do
+        {
+            yield return null;
+            if (isNewState) { break; } //check if state is changed before start.
+            
+            if (curTime > animationPlayTime)
+            {
+                SetNewState(PlayerState.AnimFindAirCorutine);
+            }
+
+            curTime += Time.deltaTime;
+        }
+        while (!isNewState);    //check if state is changed in this corutine.
+    }
+
+    IEnumerator AnimFindAirCorutine()
+    {
+        float maxAirTime = 10.0f;
+        float curTime = 0.0f;
+        playerAnimator.SetTrigger(PlayerHash.FindAirID);
+
+        do
+        {
+            yield return null;
+            if (isNewState) { break; } //check if state is changed before start.
+            
+            //TODO : if find end
+            /*if ()
+            {
+                SetNewState(PlayerState.AnimJumpEndCorutine);
+            }
+            */
+
+            if (curTime > maxAirTime)
+            {
+                SetNewState(PlayerState.AnimFindEndCorutine);
+            }
+            
+            curTime += Time.deltaTime;
+
+        }
+        while (!isNewState);    //check if state is changed in this corutine.
+    }
+
+    IEnumerator AnimFindEndCorutine()
+    {
+        playerAnimator.SetTrigger(PlayerHash.FindEndID);
+
+        float animationPlayTime = 0.95f;
+        float curTime = 0.0f;
+        do
+        {
+            yield return null;
+            if (isNewState) { break; } //check if state is changed before start.
+
+            if (curTime > animationPlayTime)
+            {
+                SetNewState(PlayerState.AnimMoveCorutine);
+                rightMouseKey = false;    // for remove jumpkey input before jump end!
             }
             curTime += Time.deltaTime;
         }
