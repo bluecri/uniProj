@@ -5,6 +5,9 @@ TagManager:
   serializedVersion: 2
   tags:
   - Collide
+  - CursorSlot
+  - Enemy
+  - Block
   layers:
   - Default
   - TransparentFX
@@ -15,15 +18,15 @@ TagManager:
   - 
   - 
   - 
-  - 
+  - CursorSlot
   - Block
-  - 
+  - MiniItem
   - 
   - Player
   - 
   - 
   - 
-  - 
+  - Enemy
   - 
   - 
   - 
